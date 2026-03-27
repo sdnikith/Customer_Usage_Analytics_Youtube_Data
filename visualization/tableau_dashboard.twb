@@ -1,0 +1,470 @@
+{
+  "version": "2023.2",
+  "workbook": {
+    "datasources": [
+      {
+        "name": "YouTube Analytics",
+        "connection": {
+          "type": "athena",
+          "server": "athena.us-west-1.amazonaws.com",
+          "port": "443",
+          "username": "aws-access-key-id",
+          "password": "aws-secret-access-key",
+          "database": "youtube_analytics"
+        }
+      }
+    ],
+    "worksheets": [
+      {
+        "name": "Overview Dashboard",
+        "dashboard": {
+          "title": "YouTube Analytics Dashboard",
+          "description": "Comprehensive analytics of YouTube video performance, engagement, and trends",
+          "layout": "grid",
+          "size": "automatic",
+          "sheets": [
+            {
+              "name": "Key Metrics",
+              "type": "summary",
+              "visualizations": [
+                {
+                  "type": "KPI",
+                  "title": "Total Videos",
+                  "field": "total_videos",
+                  "format": "number",
+                  "size": "medium"
+                },
+                {
+                  "type": "KPI", 
+                  "title": "Total Views",
+                  "field": "total_views",
+                  "format": "number",
+                  "size": "large"
+                },
+                {
+                  "type": "KPI",
+                  "title": "Avg Engagement Rate",
+                  "field": "avg_engagement_rate",
+                  "format": "percentage",
+                  "size": "medium"
+                },
+                {
+                  "type": "KPI",
+                  "title": "Unique Channels",
+                  "field": "unique_channels",
+                  "format": "number",
+                  "size": "medium"
+                }
+              ]
+            },
+            {
+              "name": "Views Trend",
+              "type": "timeseries",
+              "datasource": {
+                "table": "time_series_analysis",
+                "x_field": "publish_date",
+                "y_field": "daily_total_views",
+                "aggregation": "sum"
+              },
+              "visualization": {
+                "type": "line",
+                "title": "Daily Views Trend",
+                "x_axis": "Date",
+                "y_axis": "Total Views",
+                "trend_line": true,
+                "forecast": 30
+              }
+            },
+            {
+              "name": "Category Performance",
+              "type": "bar",
+              "datasource": {
+                "table": "category_analysis",
+                "x_field": "category_name",
+                "y_field": "total_views"
+              },
+              "visualization": {
+                "type": "horizontal_bar",
+                "title": "Views by Category",
+                "sort": "desc",
+                "color_scheme": "category",
+                "tooltip": ["category_name", "total_views", "video_count", "avg_views"]
+              }
+            },
+            {
+              "name": "Regional Distribution",
+              "type": "map",
+              "datasource": {
+                "table": "regional_analysis",
+                "location_field": "region_code",
+                "value_field": "total_views"
+              },
+              "visualization": {
+                "type": "world_map",
+                "title": "Views by Region",
+                "color_scale": "sequential",
+                "size_scale": "views"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Engagement Analysis",
+        "dashboard": {
+          "title": "Engagement & Performance Analysis",
+          "layout": "grid",
+          "sheets": [
+            {
+              "name": "Engagement Distribution",
+              "type": "scatter",
+              "datasource": {
+                "table": "engagement_analysis",
+                "x_field": "views",
+                "y_field": "engagement_rate",
+                "size_field": "likes"
+              },
+              "visualization": {
+                "type": "bubble",
+                "title": "Engagement vs Views",
+                "x_axis": "Views",
+                "y_axis": "Engagement Rate",
+                "size": "Likes",
+                "trend_line": true,
+                "quadrants": {
+                  "x_threshold": 100000,
+                  "y_threshold": 0.05
+                }
+              }
+            },
+            {
+              "name": "Engagement Categories",
+              "type": "pie",
+              "datasource": {
+                "table": "dashboard_summary",
+                "category_field": "engagement_level"
+              },
+              "visualization": {
+                "type": "donut",
+                "title": "Engagement Level Distribution",
+                "colors": ["#FF6B6B", "#4ECDC4", "#45B7D1"],
+                "labels": true
+              }
+            },
+            {
+              "name": "Publishing Time Analysis",
+              "type": "heatmap",
+              "datasource": {
+                "table": "engagement_analysis",
+                "x_field": "publish_hour",
+                "y_field": "publish_day_of_week",
+                "value_field": "avg_engagement_rate"
+              },
+              "visualization": {
+                "type": "calendar_heatmap",
+                "title": "Best Publishing Times",
+                "color_scale": "diverging",
+                "x_labels": ["12AM", "3AM", "6AM", "9AM", "12PM", "3PM", "6PM", "9PM"],
+                "y_labels": ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Content Analysis",
+        "dashboard": {
+          "title": "Content & Channel Analysis",
+          "layout": "grid",
+          "sheets": [
+            {
+              "name": "Top Channels",
+              "type": "table",
+              "datasource": {
+                "table": "channel_performance",
+                "limit": 20
+              },
+              "visualization": {
+                "type": "leaderboard",
+                "title": "Top Performing Channels",
+                "columns": [
+                  {"field": "channel_title", "label": "Channel"},
+                  {"field": "video_count", "label": "Videos", "format": "number"},
+                  {"field": "total_views", "label": "Total Views", "format": "number"},
+                  {"field": "avg_views", "label": "Avg Views", "format": "number"},
+                  {"field": "avg_engagement_rate", "label": "Engagement Rate", "format": "percentage"}
+                ],
+                "sort": "total_views",
+                "sort_desc": true
+              }
+            },
+            {
+              "name": "Content Length Analysis",
+              "type": "scatter",
+              "datasource": {
+                "table": "video_performance_overview"
+              },
+              "visualization": {
+                "type": "scatter",
+                "title": "Title Length vs Engagement",
+                "x_field": "title_length",
+                "y_field": "engagement_rate",
+                "color_field": "view_category",
+                "trend_line": true
+              }
+            },
+            {
+              "name": "Tag Impact",
+              "type": "box_plot",
+              "datasource": {
+                "table": "video_performance_overview",
+                "group_by": "tag_count_category"
+              },
+              "visualization": {
+                "type": "box",
+                "title": "Engagement by Tag Count",
+                "y_field": "engagement_rate",
+                "outliers": true,
+                "quartiles": true
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "ML Predictions",
+        "dashboard": {
+          "title": "Machine Learning Predictions Analysis",
+          "layout": "grid",
+          "sheets": [
+            {
+              "name": "Prediction Accuracy",
+              "type": "comparison",
+              "datasource": {
+                "table": "ml_predictions_analysis"
+              },
+              "visualization": {
+                "type": "dual_axis",
+                "title": "Actual vs Predicted Views",
+                "left_axis": {
+                  "field": "views",
+                  "label": "Actual Views",
+                  "color": "#1f77b4"
+                },
+                "right_axis": {
+                  "field": "ml_predicted_views", 
+                  "label": "Predicted Views",
+                  "color": "#ff7f0e"
+                },
+                "reference_line": 45
+              }
+            },
+            {
+              "name": "Prediction Error",
+              "type": "histogram",
+              "datasource": {
+                "table": "ml_predictions_analysis",
+                "field": "views_prediction_error"
+              },
+              "visualization": {
+                "type": "distribution",
+                "title": "Prediction Error Distribution",
+                "bins": 20,
+                "statistics": true,
+                "normal_curve": true
+              }
+            },
+            {
+              "name": "NLP Performance",
+              "type": "summary",
+              "datasource": {
+                "table": "ml_predictions_analysis"
+              },
+              "visualization": {
+                "type": "metric_cards",
+                "title": "NLP Categorization Performance",
+                "metrics": [
+                  {
+                    "label": "Total Predictions",
+                    "field": "total_nlp_predictions",
+                    "format": "number"
+                  },
+                  {
+                    "label": "Correct Predictions",
+                    "field": "correct_nlp_predictions",
+                    "format": "number"
+                  },
+                  {
+                    "label": "Accuracy Rate",
+                    "field": "correct_nlp_predictions / total_nlp_predictions",
+                    "format": "percentage"
+                  },
+                  {
+                    "label": "Avg Confidence",
+                    "field": "nlp_category_confidence",
+                    "format": "percentage"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "Trending Analysis",
+        "dashboard": {
+          "title": "Trending & Time Analysis",
+          "layout": "grid", 
+          "sheets": [
+            {
+              "name": "Trending Speed",
+              "type": "funnel",
+              "datasource": {
+                "table": "trending_analysis"
+              },
+              "visualization": {
+                "type": "inverted_funnel",
+                "title": "Time to Trend",
+                "stages": ["Very Fast", "Fast", "Medium", "Slow"],
+                "value_field": "trending_speed",
+                "colors": ["#2ecc71", "#f39c12", "#e67e22", "#e74c3c"]
+              }
+            },
+            {
+              "name": "Trending Patterns",
+              "type": "calendar",
+              "datasource": {
+                "table": "trending_analysis",
+                "date_field": "trending_date",
+                "value_field": "count(*)"
+              },
+              "visualization": {
+                "type": "calendar",
+                "title": "Trending Calendar",
+                "color_scale": "sequential",
+                "highlight_weekends": true
+              }
+            },
+            {
+              "name": "Publish to Trend Time",
+              "type": "scatter",
+              "datasource": {
+                "table": "trending_analysis"
+              },
+              "visualization": {
+                "type": "scatter",
+                "title": "Publish Date vs Trend Date",
+                "x_field": "publish_date",
+                "y_field": "trending_date",
+                "size_field": "views",
+                "color_field": "trending_speed",
+                "trend_line": true
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "filters": [
+      {
+        "name": "Date Range",
+        "type": "daterange",
+        "field": "publish_date",
+        "default": "last_30_days"
+      },
+      {
+        "name": "Category",
+        "type": "multiselect",
+        "field": "category_id",
+        "options": [
+          {"value": 1, "label": "Film & Animation"},
+          {"value": 2, "label": "Autos & Vehicles"},
+          {"value": 10, "label": "Music"},
+          {"value": 15, "label": "Pets & Animals"},
+          {"value": 17, "label": "Sports"},
+          {"value": 19, "label": "Travel & Events"},
+          {"value": 20, "label": "Gaming"},
+          {"value": 22, "label": "People & Blogs"},
+          {"value": 23, "label": "Comedy"},
+          {"value": 24, "label": "Entertainment"},
+          {"value": 25, "label": "News & Politics"},
+          {"value": 26, "label": "Howto & Style"},
+          {"value": 27, "label": "Education"},
+          {"value": 28, "label": "Science & Technology"},
+          {"value": 29, "label": "Nonprofits & Activism"}
+        ]
+      },
+      {
+        "name": "Region",
+        "type": "multiselect",
+        "field": "region_code",
+        "options": [
+          {"value": "US", "label": "United States"},
+          {"value": "GB", "label": "United Kingdom"},
+          {"value": "CA", "label": "Canada"},
+          {"value": "DE", "label": "Germany"},
+          {"value": "FR", "label": "France"},
+          {"value": "IN", "label": "India"},
+          {"value": "JP", "label": "Japan"},
+          {"value": "KR", "label": "South Korea"},
+          {"value": "MX", "label": "Mexico"},
+          {"value": "RU", "label": "Russia"}
+        ]
+      },
+      {
+        "name": "View Range",
+        "type": "slider",
+        "field": "views",
+        "min": 0,
+        "max": 10000000,
+        "step": 1000
+      },
+      {
+        "name": "Engagement Rate",
+        "type": "slider",
+        "field": "engagement_rate",
+        "min": 0,
+        "max": 0.1,
+        "step": 0.001
+      }
+    ],
+    "actions": [
+      {
+        "name": "Export to CSV",
+        "type": "export",
+        "format": "csv"
+      },
+      {
+        "name": "Export to PDF",
+        "type": "export", 
+        "format": "pdf"
+      },
+      {
+        "name": "Share Link",
+        "type": "share",
+        "platform": "tableau_public"
+      },
+      {
+        "name": "Subscribe to Data",
+        "type": "subscription",
+        "frequency": "daily"
+      }
+    ],
+    "permissions": {
+      "view": true,
+      "export": true,
+      "share": true,
+      "filter": true
+    },
+    "metadata": {
+      "created_date": "2024-03-26",
+      "last_updated": "2024-03-26",
+      "version": "1.0",
+      "author": "YouTube Analytics Team",
+      "description": "Interactive dashboard for YouTube video analytics with ML predictions and engagement analysis",
+      "data_sources": ["youtube_cleaned.youtube_cleaned_data"],
+      "refresh_schedule": "daily",
+      "data_freshness": "24 hours"
+    }
+  }
+}

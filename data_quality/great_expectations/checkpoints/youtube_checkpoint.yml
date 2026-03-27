@@ -1,0 +1,103 @@
+name: youtube_checkpoint
+config_version: 1.0
+class_name: Checkpoint
+run_name_template: "%Y%m%d-%H%M%S-youtube-data-validation"
+expectation_suite_name: youtube_data_suite
+batch_request:
+  datasource_name: youtube_datasource
+  data_connector_name: default_inferred_data_connector_name
+  data_asset_name: youtube_cleaned_data
+action_list:
+  - name: store_validation_result
+    action:
+      class_name: StoreValidationResultAction
+  - name: store_evaluation_params
+    action:
+      class_name: StoreEvaluationParametersAction
+  - name: update_data_docs
+    action:
+      class_name: UpdateDataDocsAction
+  - name: send_slack_notification_on_validation_result
+    action:
+      class_name: SlackNotificationAction
+      slack_webhook: ${SLACK_WEBHOOK_URL}
+      notify_on: all
+      renderer:
+        module_name: great_expectations.render.renderer.slack_renderer
+        class_name: SlackRenderer
+evaluation_parameters: {}
+profilers: []
+validation_operator_name: action_list_operator
+runtime_configuration:
+  result_format:
+    result_format: COMPLETE
+    partial_unexpected_count: 20
+    include_column_types: true
+  catch_exceptions: false
+  verbose: true
+  replace_nans_with: null
+  result_file_prefix: youtube_validation_
+  result_file_suffix: .json
+  result_format_dict:
+    sort_keys: true
+    indent: 2
+  export_to_json: true
+  export_to_html: true
+  export_to_xlsx: false
+  export_to_csv: false
+  send_notification: true
+  notification_threshold: 0.9
+  send_failure_notification: true
+  send_success_notification: false
+  send_warning_notification: true
+  notification_config:
+    slack:
+      webhook_url: ${SLACK_WEBHOOK_URL}
+      channel: "#data-quality"
+      username: "Data Quality Bot"
+      icon_emoji: ":chart_with_upwards_trend:"
+    email:
+      smtp_server: "smtp.gmail.com"
+      smtp_port: 587
+      sender_email: "${SENDER_EMAIL}"
+      sender_password: "${SENDER_PASSWORD}"
+      recipient_emails: ["${RECIPIENT_EMAIL}"]
+      subject_prefix: "[Data Quality Alert]"
+  cloudwatch:
+    namespace: "YouTube/Analytics"
+    metric_name: "DataQualityScore"
+    dimension_name: "DataSource"
+    dimension_value: "YouTubeCleaned"
+    region: "us-west-1"
+    publish_custom_metrics: true
+    alarm_threshold: 90
+    alarm_name: "YouTubeDataQualityAlarm"
+  s3:
+    bucket: "${S3_QUALITY_REPORTS_BUCKET}"
+    prefix: "quality-reports/"
+    save_html_report: true
+    save_json_report: true
+    save_summary_report: true
+    report_retention_days: 30
+  retry_config:
+    max_retries: 3
+    retry_delay: 5
+    backoff_factor: 2
+  performance_config:
+    timeout_seconds: 300
+    memory_limit_mb: 1024
+    parallel_validation: true
+  data_quality_thresholds:
+    success_threshold: 0.95
+    warning_threshold: 0.85
+    failure_threshold: 0.70
+  custom_validations:
+    check_data_freshness: true
+    max_data_age_hours: 24
+    check_schema_drift: true
+    check_data_volume_anomalies: true
+    volume_anomaly_threshold: 0.2
+    check_missing_value_patterns: true
+    check_outlier_patterns: true
+    outlier_detection_method: "iqr"
+    outlier_threshold: 3.0

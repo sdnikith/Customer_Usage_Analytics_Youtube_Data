@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: youtube_analytics_airflow
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+      - ./plugins:/opt/airflow/plugins
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:13
+    container_name: youtube_analytics_postgres
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    container_name: youtube_analytics_redis
+    restart: always
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
