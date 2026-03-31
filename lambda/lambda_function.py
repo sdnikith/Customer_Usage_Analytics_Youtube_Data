@@ -1,7 +1,12 @@
+import logging
+import urllib.parse
+
 import awswrangler as wr
 import pandas as pd
-import urllib.parse
 import os
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 os_input_s3_cleansed_layer = os.environ['s3_cleansed_layer']
 os_input_glue_catalog_db_name = os.environ['glue_catalog_db_name']
@@ -33,6 +38,5 @@ def lambda_handler(event, context):
 
         return wr_response
     except Exception as e:
-        print(e)
-        print('Error getting object {} from bucket {}. Make sure they exist and your bucket is in the same region as this function.'.format(key, bucket))
-        raise e
+        logger.exception("Failed to process s3://%s/%s", bucket, key)
+        raise

@@ -35,27 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 class EngagementPredictor:
-    """
-    Machine learning model for predicting YouTube video engagement.
-    
-    Attributes:
-        rf_model: Random Forest regressor
-        gb_model: Gradient Boosting regressor
-        best_model: Best performing model
-        scaler: Feature scaler
-        feature_names: List of feature names
-        target_variables: List of target variables
-        model_performance: Dictionary of model performance metrics
-        r2_threshold: Minimum R² threshold
-    """
-    
+    """Trains Random Forest and Gradient Boosting regressors to predict views and engagement_rate."""
+
     def __init__(self, model_path: str = "models/engagement_predictor"):
-        """
-        Initialize the engagement predictor.
-        
-        Args:
-            model_path (str): Path to save/load models
-        """
         self.model_path = model_path
         self.rf_model = None
         self.gb_model = None
@@ -69,15 +51,7 @@ class EngagementPredictor:
         logger.info(f"EngagementPredictor initialized with R² threshold: {self.r2_threshold}")
     
     def prepare_data(self, df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """
-        Prepare data for ML training with feature selection and cleaning.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            Tuple[pd.DataFrame, pd.DataFrame]: (features, targets)
-        """
+        """Selects numeric features, fills missing values, and log-transforms views."""
         logger.info("Preparing data for engagement prediction")
         
         # Make a copy to avoid modifying original
@@ -129,155 +103,59 @@ class EngagementPredictor:
         
         return df_features, df_targets
     
-    def train_random_forest(self, X: pd.DataFrame, y: pd.Series, 
-                          target_name: str) -> Dict[str, Any]:
-        """
-        Train Random Forest regressor.
-        
-        Args:
-            X (pd.DataFrame): Features
-            y (pd.Series): Target
-            target_name (str): Name of target variable
-            
-        Returns:
-            Dict[str, Any]: Training results
-        """
-        logger.info(f"Training Random Forest for {target_name}")
-        
-        # Split data
+    def _fit_regressor(self, X: pd.DataFrame, y: pd.Series,
+                       target_name: str, model) -> Dict[str, Any]:
+        """Fit any sklearn regressor and return a standardised results dict."""
+        model_type = type(model).__name__
+        logger.info(f"Training {model_type} for {target_name}")
+
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42
         )
-        
-        # Scale features
         X_train_scaled = self.scaler.fit_transform(X_train)
         X_test_scaled = self.scaler.transform(X_test)
-        
-        # Initialize Random Forest
-        rf = RandomForestRegressor(
-            n_estimators=200,
-            max_depth=15,
-            min_samples_split=5,
-            min_samples_leaf=2,
-            max_features='sqrt',
-            random_state=42,
-            n_jobs=-1
+
+        model.fit(X_train_scaled, y_train)
+
+        train_metrics = self._calculate_metrics(y_train, model.predict(X_train_scaled), target_name, "train")
+        test_metrics = self._calculate_metrics(y_test, model.predict(X_test_scaled), target_name, "test")
+
+        cv_scores = cross_val_score(model, X_train_scaled, y_train, cv=5, scoring='r2', n_jobs=-1)
+
+        feature_importance = (
+            pd.DataFrame({'feature': self.feature_names, 'importance': model.feature_importances_})
+            .sort_values('importance', ascending=False)
+            .head(20)
+            .to_dict('records')
         )
-        
-        # Train model
-        rf.fit(X_train_scaled, y_train)
-        
-        # Predictions
-        y_train_pred = rf.predict(X_train_scaled)
-        y_test_pred = rf.predict(X_test_scaled)
-        
-        # Calculate metrics
-        train_metrics = self._calculate_metrics(y_train, y_train_pred, target_name, "train")
-        test_metrics = self._calculate_metrics(y_test, y_test_pred, target_name, "test")
-        
-        # Cross-validation
-        cv_scores = cross_val_score(
-            rf, X_train_scaled, y_train, 
-            cv=5, scoring='r2', n_jobs=-1
-        )
-        
-        # Feature importance
-        feature_importance = pd.DataFrame({
-            'feature': self.feature_names,
-            'importance': rf.feature_importances_
-        }).sort_values('importance', ascending=False)
-        
-        results = {
-            'model': rf,
-            'model_type': 'RandomForest',
+
+        logger.info(f"{model_type} trained for {target_name}. Test R²: {test_metrics['r2']:.4f}")
+        return {
+            'model': model,
+            'model_type': model_type,
             'target': target_name,
             'train_metrics': train_metrics,
             'test_metrics': test_metrics,
-            'cv_mean_r2': cv_scores.mean(),
-            'cv_std_r2': cv_scores.std(),
-            'feature_importance': feature_importance.head(20).to_dict('records'),
+            'cv_mean_r2': float(cv_scores.mean()),
+            'cv_std_r2': float(cv_scores.std()),
+            'feature_importance': feature_importance,
             'meets_threshold': test_metrics['r2'] >= self.r2_threshold,
-            'training_timestamp': datetime.now(timezone.utc).isoformat()
+            'training_timestamp': datetime.now(timezone.utc).isoformat(),
         }
-        
-        logger.info(f"Random Forest trained. Test R²: {test_metrics['r2']:.4f}")
-        
-        return results
-    
-    def train_gradient_boosting(self, X: pd.DataFrame, y: pd.Series,
-                            target_name: str) -> Dict[str, Any]:
-        """
-        Train Gradient Boosting regressor.
-        
-        Args:
-            X (pd.DataFrame): Features
-            y (pd.Series): Target
-            target_name (str): Name of target variable
-            
-        Returns:
-            Dict[str, Any]: Training results
-        """
-        logger.info(f"Training Gradient Boosting for {target_name}")
-        
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
+
+    def train_random_forest(self, X: pd.DataFrame, y: pd.Series, target_name: str) -> Dict[str, Any]:
+        model = RandomForestRegressor(
+            n_estimators=200, max_depth=15, min_samples_split=5,
+            min_samples_leaf=2, max_features='sqrt', random_state=42, n_jobs=-1,
         )
-        
-        # Scale features
-        X_train_scaled = self.scaler.fit_transform(X_train)
-        X_test_scaled = self.scaler.transform(X_test)
-        
-        # Initialize Gradient Boosting
-        gb = GradientBoostingRegressor(
-            n_estimators=200,
-            learning_rate=0.1,
-            max_depth=6,
-            min_samples_split=5,
-            min_samples_leaf=2,
-            max_features='sqrt',
-            random_state=42
+        return self._fit_regressor(X, y, target_name, model)
+
+    def train_gradient_boosting(self, X: pd.DataFrame, y: pd.Series, target_name: str) -> Dict[str, Any]:
+        model = GradientBoostingRegressor(
+            n_estimators=200, learning_rate=0.1, max_depth=6,
+            min_samples_split=5, min_samples_leaf=2, max_features='sqrt', random_state=42,
         )
-        
-        # Train model
-        gb.fit(X_train_scaled, y_train)
-        
-        # Predictions
-        y_train_pred = gb.predict(X_train_scaled)
-        y_test_pred = gb.predict(X_test_scaled)
-        
-        # Calculate metrics
-        train_metrics = self._calculate_metrics(y_train, y_train_pred, target_name, "train")
-        test_metrics = self._calculate_metrics(y_test, y_test_pred, target_name, "test")
-        
-        # Cross-validation
-        cv_scores = cross_val_score(
-            gb, X_train_scaled, y_train,
-            cv=5, scoring='r2', n_jobs=-1
-        )
-        
-        # Feature importance
-        feature_importance = pd.DataFrame({
-            'feature': self.feature_names,
-            'importance': gb.feature_importances_
-        }).sort_values('importance', ascending=False)
-        
-        results = {
-            'model': gb,
-            'model_type': 'GradientBoosting',
-            'target': target_name,
-            'train_metrics': train_metrics,
-            'test_metrics': test_metrics,
-            'cv_mean_r2': cv_scores.mean(),
-            'cv_std_r2': cv_scores.std(),
-            'feature_importance': feature_importance.head(20).to_dict('records'),
-            'meets_threshold': test_metrics['r2'] >= self.r2_threshold,
-            'training_timestamp': datetime.now(timezone.utc).isoformat()
-        }
-        
-        logger.info(f"Gradient Boosting trained. Test R²: {test_metrics['r2']:.4f}")
-        
-        return results
+        return self._fit_regressor(X, y, target_name, model)
     
     def _calculate_metrics(self, y_true: np.ndarray, y_pred: np.ndarray,
                          target_name: str, dataset: str) -> Dict[str, float]:
@@ -623,8 +501,6 @@ class EngagementPredictor:
             return False
         
         try:
-            import os
-            
             os.makedirs(self.model_path, exist_ok=True)
             
             # Save models and metadata
@@ -690,26 +566,36 @@ def main():
     Main function to test the engagement predictor.
     """
     try:
-        # Create sample data
-        np.random.seed(42)
         n_samples = 1000
-        
+        rng = np.random.default_rng(42)
+        title_templates = [
+            "Python tutorial for beginners",
+            "Top 10 gaming moments",
+            "Easy pasta recipe",
+            "Travel vlog Tokyo",
+            "Stand-up comedy special",
+            "Machine learning explained",
+            "Guitar lesson fingerpicking",
+            "Morning workout routine",
+            "Book review thriller",
+            "DIY home improvement",
+        ]
         data = {
-            'video_id': [f'video_{i}' for i in range(n_samples)],
-            'title': [f'How to cook pasta {i}' for i in range(n_samples)],
-            'description': [f'This video shows how to cook delicious pasta dish {i}' for i in range(n_samples)],
-            'category_id': np.random.randint(1, 30, n_samples),
-            'channel_title': [f'Cooking Channel {i%10}' for i in range(n_samples)],
+            'video_id': [f'vid_{i:04d}' for i in range(n_samples)],
+            'title': [title_templates[i % len(title_templates)] for i in range(n_samples)],
+            'description': [f'Full walkthrough — part {i + 1}' for i in range(n_samples)],
+            'category_id': rng.integers(1, 30, n_samples),
+            'channel_title': [f'Channel {i % 10}' for i in range(n_samples)],
             'publish_date': pd.date_range('2023-01-01', periods=n_samples, freq='H'),
             'trending_date': pd.date_range('2023-01-02', periods=n_samples, freq='H'),
-            'region_code': np.random.choice(['US', 'GB', 'CA', 'DE'], n_samples),
-            'views': np.random.randint(1000, 1000000, n_samples),
-            'likes': np.random.randint(10, 10000, n_samples),
-            'comments': np.random.randint(1, 1000, n_samples),
-            'title_length': np.random.randint(10, 100, n_samples),
-            'description_length': np.random.randint(50, 500, n_samples),
-            'tag_count': np.random.randint(0, 20, n_samples),
-            'engagement_rate': np.random.uniform(0.001, 0.1, n_samples)
+            'region_code': rng.choice(['US', 'GB', 'CA', 'DE'], n_samples),
+            'views': rng.integers(1000, 1_000_000, n_samples),
+            'likes': rng.integers(10, 10_000, n_samples),
+            'comments': rng.integers(1, 1_000, n_samples),
+            'title_length': rng.integers(10, 100, n_samples),
+            'description_length': rng.integers(50, 500, n_samples),
+            'tag_count': rng.integers(0, 20, n_samples),
+            'engagement_rate': rng.uniform(0.001, 0.1, n_samples),
         }
         
         df = pd.DataFrame(data)

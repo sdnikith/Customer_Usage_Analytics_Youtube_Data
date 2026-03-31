@@ -11,7 +11,6 @@ import re
 import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
-import warnings
 
 # Configure logging
 logging.basicConfig(
@@ -20,21 +19,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Suppress warnings
-warnings.filterwarnings('ignore')
-
 
 class YouTubeDataCleaner:
-    """
-    Comprehensive data cleaning utilities for YouTube data.
-    
-    Attributes:
-        validation_rules (Dict): Data validation rules
-        cleaning_stats (Dict): Statistics about cleaning operations
-    """
-    
     def __init__(self):
-        """Initialize the data cleaner with validation rules."""
         self.validation_rules = {
             'required_fields': ['video_id', 'title', 'channel_title', 'views', 'likes'],
             'numeric_fields': ['views', 'likes', 'comments', 'tag_count', 'category_id'],
@@ -65,15 +52,7 @@ class YouTubeDataCleaner:
         logger.info("YouTubeDataCleaner initialized")
     
     def validate_schema(self, df: pd.DataFrame) -> Tuple[bool, List[str]]:
-        """
-        Validate DataFrame schema against expected structure.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            Tuple[bool, List[str]]: (is_valid, list_of_issues)
-        """
+        """Returns (is_valid, issues) — checks required fields and numeric types."""
         issues = []
         
         # Check required fields
@@ -106,15 +85,6 @@ class YouTubeDataCleaner:
         return is_valid, issues
     
     def clean_text_fields(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Clean and standardize text fields.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            pd.DataFrame: DataFrame with cleaned text fields
-        """
         logger.info("Cleaning text fields")
         
         df_clean = df.copy()
@@ -147,15 +117,6 @@ class YouTubeDataCleaner:
         return df_clean
     
     def clean_numeric_fields(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Clean and validate numeric fields.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            pd.DataFrame: DataFrame with cleaned numeric fields
-        """
         logger.info("Cleaning numeric fields")
         
         df_clean = df.copy()
@@ -189,15 +150,6 @@ class YouTubeDataCleaner:
         return df_clean
     
     def clean_date_fields(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Clean and standardize date fields.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            pd.DataFrame: DataFrame with cleaned date fields
-        """
         logger.info("Cleaning date fields")
         
         df_clean = df.copy()
@@ -226,16 +178,6 @@ class YouTubeDataCleaner:
         return df_clean
     
     def remove_duplicates(self, df: pd.DataFrame, subset: List[str] = None) -> pd.DataFrame:
-        """
-        Remove duplicate records based on specified columns.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            subset (List[str]): Columns to check for duplicates
-            
-        Returns:
-            pd.DataFrame: DataFrame with duplicates removed
-        """
         if subset is None:
             subset = ['video_id']
         
@@ -250,15 +192,7 @@ class YouTubeDataCleaner:
         return df_clean
     
     def handle_outliers(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Handle outliers in numeric fields using IQR method.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            pd.DataFrame: DataFrame with outliers handled
-        """
+        """Caps outliers in views/likes/comments at 1.5*IQR bounds."""
         logger.info("Handling outliers")
         
         df_clean = df.copy()
@@ -292,15 +226,7 @@ class YouTubeDataCleaner:
         return df_clean
     
     def add_derived_fields(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Add derived fields for analysis.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            pd.DataFrame: DataFrame with derived fields
-        """
+        """Adds engagement_rate, title metrics, tag_count, time_to_trending, and bucketed categories."""
         logger.info("Adding derived fields")
         
         df_clean = df.copy()
@@ -353,15 +279,6 @@ class YouTubeDataCleaner:
         return df_clean
     
     def comprehensive_clean(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Perform comprehensive data cleaning.
-        
-        Args:
-            df (pd.DataFrame): Input DataFrame
-            
-        Returns:
-            pd.DataFrame: Cleaned DataFrame
-        """
         logger.info("Starting comprehensive data cleaning")
         
         # Initialize stats
@@ -406,12 +323,6 @@ class YouTubeDataCleaner:
         return df_clean
     
     def get_cleaning_report(self) -> Dict[str, Any]:
-        """
-        Get a report of cleaning operations.
-        
-        Returns:
-            Dict[str, Any]: Cleaning statistics
-        """
         return {
             'cleaning_statistics': self.cleaning_stats.copy(),
             'validation_rules': self.validation_rules,
@@ -419,12 +330,6 @@ class YouTubeDataCleaner:
         }
     
     def _calculate_quality_score(self) -> float:
-        """
-        Calculate overall data quality score.
-        
-        Returns:
-            float: Quality score between 0 and 100
-        """
         if self.cleaning_stats['initial_records'] == 0:
             return 0.0
         

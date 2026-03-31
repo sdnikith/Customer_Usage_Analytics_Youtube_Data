@@ -15,13 +15,20 @@ from flask import Flask, render_template, jsonify, request, send_file
 from flask_socketio import SocketIO, emit
 import logging
 
-# Configure logging
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.constants import YOUTUBE_CATEGORIES
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'youtube-analytics-secret-key'
-socketio = SocketIO(app, cors_allowed_origins="*")
+_secret = os.environ.get('SECRET_KEY')
+if not _secret:
+    raise RuntimeError("SECRET_KEY environment variable must be set")
+app.config['SECRET_KEY'] = _secret
+_allowed_origins = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:8080').split(',')
+socketio = SocketIO(app, cors_allowed_origins=_allowed_origins)
 
 # Global data storage (in production, use database)
 dashboard_data = {
@@ -39,12 +46,7 @@ dashboard_data = {
 }
 
 class YouTubeAnalyticsEngine:
-    """
-    Analytics engine for processing YouTube data and generating insights.
-    """
-    
     def __init__(self):
-        """Initialize the analytics engine."""
         self.data = None
         self.load_sample_data()
         logger.info("YouTubeAnalyticsEngine initialized")
@@ -134,11 +136,8 @@ class YouTubeAnalyticsEngine:
         )['views'].sum().reset_index()
         
         return [
-            {
-                'date': row['publish_date'].strftime('%Y-%m-%d'),
-                'views': int(row['views'])
-            }
-            for _, row in daily_views.iterrows()
+            {'date': str(d), 'views': int(v)}
+            for d, v in zip(daily_views['publish_date'], daily_views['views'])
         ]
     
     def get_category_performance(self):
@@ -146,27 +145,22 @@ class YouTubeAnalyticsEngine:
         if self.data is None:
             return []
         
-        category_names = {
-            10: 'Music', 20: 'Gaming', 23: 'Comedy',
-            26: 'Howto & Style', 27: 'Education'
-        }
-        
-        category_stats = self.data.groupby('category_id').agg({
-            'views': 'sum',
-            'engagement_rate': 'mean',
-            'video_count': 'count'
-        }).reset_index()
-        
-        return [
-            {
-                'category': category_names.get(row['category_id'], f'Category {row["category_id"]}'),
+        category_stats = self.data.groupby('category_id').agg(
+            views=('views', 'sum'),
+            avg_engagement=('engagement_rate', 'mean'),
+            count=('video_id', 'count'),
+        ).reset_index()
+
+        records = []
+        for _, row in category_stats.iterrows():
+            records.append({
+                'category': YOUTUBE_CATEGORIES.get(row['category_id'], f'Category {int(row["category_id"])}'),
                 'category_id': int(row['category_id']),
                 'views': int(row['views']),
-                'avg_engagement': float(row['engagement_rate'] * 100),
-                'count': int(row['video_count'])
-            }
-            for _, row in category_stats.iterrows()
-        ]
+                'avg_engagement': float(row['avg_engagement'] * 100),
+                'count': int(row['count']),
+            })
+        return records
     
     def get_regional_distribution(self):
         """Get views distribution by region."""
@@ -250,21 +244,19 @@ class YouTubeAnalyticsEngine:
         if self.data is None:
             return []
         
-        channel_stats = self.data.groupby('channel_title').agg({
-            'views': 'sum',
-            'engagement_rate': 'mean',
-            'video_count': 'count'
-        }).sort_values('views', ascending=False).head(limit).reset_index()
-        
-        return [
-            {
-                'channel': row['channel_title'],
-                'total_views': int(row['views']),
-                'avg_engagement': float(row['engagement_rate'] * 100),
-                'count': int(row['video_count'])
-            }
-            for _, row in channel_stats.iterrows()
-        ]
+        channel_stats = self.data.groupby('channel_title').agg(
+            views=('views', 'sum'),
+            avg_engagement=('engagement_rate', 'mean'),
+            count=('video_id', 'count'),
+        ).sort_values('views', ascending=False).head(limit).reset_index()
+
+        return channel_stats.assign(
+            total_views=channel_stats['views'].astype(int),
+            avg_engagement=(channel_stats['avg_engagement'] * 100).round(2),
+            count=channel_stats['count'].astype(int),
+        ).rename(columns={'channel_title': 'channel'})[
+            ['channel', 'total_views', 'avg_engagement', 'count']
+        ].to_dict('records')
 
 # Initialize analytics engine
 analytics_engine = YouTubeAnalyticsEngine()
@@ -274,22 +266,17 @@ def update_dashboard_data():
     global dashboard_data
     
     try:
+        metrics = analytics_engine.get_dashboard_metrics()
         dashboard_data.update({
-            'total_videos': analytics_engine.get_dashboard_metrics()['total_videos'],
-            'total_views': analytics_engine.get_dashboard_metrics()['total_views'],
-            'avg_engagement': analytics_engine.get_dashboard_metrics()['avg_engagement'],
-            'unique_channels': analytics_engine.get_dashboard_metrics()['unique_channels'],
+            **metrics,
             'daily_views': analytics_engine.get_daily_views_trend(),
             'category_data': analytics_engine.get_category_performance(),
             'region_data': analytics_engine.get_regional_distribution(),
             'time_data': analytics_engine.get_time_analysis(),
             'ml_performance': analytics_engine.get_ml_performance(),
             'nlp_accuracy': analytics_engine.get_nlp_accuracy(),
-            'last_updated': datetime.now().isoformat()
+            'last_updated': datetime.now().isoformat(),
         })
-        
-        logger.info("Dashboard data updated successfully")
-        
     except Exception as e:
         logger.error(f"Error updating dashboard data: {e}")
 
@@ -462,69 +449,28 @@ def refresh_dashboard():
 
 @socketio.on('connect')
 def handle_connect():
-    """Handle WebSocket connection."""
     logger.info("Client connected to dashboard")
     update_dashboard_data()
     emit('dashboard_update', dashboard_data)
 
 @socketio.on('request_update')
 def handle_request_update():
-    """Handle manual update request."""
     logger.info("Manual update requested")
     update_dashboard_data()
     emit('dashboard_update', dashboard_data)
 
 @socketio.on('disconnect')
 def handle_disconnect():
-    """Handle WebSocket disconnection."""
     logger.info("Client disconnected from dashboard")
 
 def main():
-    """Main function to run the dashboard server."""
-    logger.info("🚀 Starting YouTube Analytics Dashboard Server")
-    logger.info("=" * 60)
-    
-    # Initialize dashboard data
+    host = os.environ.get('DASHBOARD_HOST', '0.0.0.0')
+    port = int(os.environ.get('DASHBOARD_PORT', '8080'))
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+
     update_dashboard_data()
-    
-    # Print server information
-    print("📊 YouTube Analytics Dashboard Server")
-    print("=" * 40)
-    print("🌐 Server Information:")
-    print(f"   📡 Local URL: http://localhost:8080")
-    print(f"   📡 Dashboard: http://localhost:8080/dashboard")
-    print(f"   📡 API Docs: http://localhost:8080/api")
-    print()
-    print("🔗 Available Endpoints:")
-    endpoints = [
-        "GET /api/dashboard/metrics",
-        "GET /api/dashboard/daily-views",
-        "GET /api/dashboard/category-performance", 
-        "GET /api/dashboard/regional-distribution",
-        "GET /api/dashboard/time-analysis",
-        "GET /api/dashboard/scatter-data",
-        "GET /api/dashboard/ml-performance",
-        "GET /api/dashboard/nlp-accuracy",
-        "GET /api/dashboard/top-channels",
-        "POST /api/dashboard/refresh"
-    ]
-    
-    for endpoint in endpoints:
-        print(f"   📡 {endpoint}")
-    
-    print()
-    print("🔧 Features:")
-    print("   ✅ Real-time data updates via WebSocket")
-    print("   ✅ RESTful API for all dashboard components")
-    print("   ✅ Responsive web interface")
-    print("   ✅ Interactive charts and visualizations")
-    print("   ✅ ML and NLP performance tracking")
-    print()
-    print("🚀 Starting server on http://localhost:8080")
-    print("=" * 60)
-    
-    # Run the application
-    socketio.run(app, host='0.0.0.0', port=8080, debug=True)
+    logger.info(f"Starting dashboard server on http://{host}:{port}")
+    socketio.run(app, host=host, port=port, debug=debug)
 
 if __name__ == '__main__':
     main()
